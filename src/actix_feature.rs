@@ -20,7 +20,7 @@ impl FromRequest for FirebaseUser {
 
     fn from_request(req: &HttpRequest, _: &mut dev::Payload) -> Self::Future {
         let firebase_auth = req
-            .app_data::<web::Data<FirebaseAuth>>()
+            .app_data::<web::Data<FirebaseAuth<FirebaseUser>>>()
             .expect("must init FirebaseAuth in Application Data. see description in https://crates.io/crates/firebase-auth");
 
         let bearer = match Authorization::<Bearer>::parse(req) {

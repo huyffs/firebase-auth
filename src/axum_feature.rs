@@ -4,16 +4,17 @@ use axum::{
     http::{self, request::Parts, StatusCode},
     response::{IntoResponse, Response},
 };
+use serde::de::DeserializeOwned;
 
 use crate::{FirebaseAuth, FirebaseUser};
 
 #[derive(Clone)]
-pub struct FirebaseAuthState {
-    pub firebase_auth: FirebaseAuth,
+pub struct FirebaseAuthState<T: DeserializeOwned + Clone + Send + 'static> {
+    pub firebase_auth: FirebaseAuth<T>,
 }
 
-impl FromRef<FirebaseAuthState> for FirebaseAuth {
-    fn from_ref(state: &FirebaseAuthState) -> Self {
+impl<T: DeserializeOwned + Clone + Send> FromRef<FirebaseAuthState<T>> for FirebaseAuth<T> {
+    fn from_ref(state: &FirebaseAuthState<T>) -> Self {
         state.firebase_auth.clone()
     }
 }
@@ -30,7 +31,7 @@ fn get_bearer_token(header: &str) -> Option<String> {
 #[async_trait]
 impl<S> FromRequestParts<S> for FirebaseUser
 where
-    FirebaseAuthState: FromRef<S>,
+    FirebaseAuthState<FirebaseUser>: FromRef<S>,
     S: Send + Sync,
 {
     type Rejection = UnauthorizedResponse;

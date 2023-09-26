@@ -17,7 +17,7 @@ async fn public() -> impl Responder {
 async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(Env::default().default_filter_or("debug"));
 
-    let firebase_auth = FirebaseAuth::new("my-project-id").await;
+    let firebase_auth = FirebaseAuth::<FirebaseUser>::new("my-project-id").await;
 
     let app_data = Data::new(firebase_auth);
 

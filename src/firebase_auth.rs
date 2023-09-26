@@ -1,12 +1,14 @@
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use serde::de::DeserializeOwned;
 use std::{
+    marker::PhantomData,
     sync::{Arc, Mutex},
     time::Duration,
 };
 use tokio::{task::JoinHandle, time::sleep};
 use tracing::*;
 
-use crate::structs::{FirebaseUser, JwkConfiguration, JwkKeys, KeyResponse, PublicKeysError};
+use crate::structs::{JwkConfiguration, JwkKeys, KeyResponse, PublicKeysError};
 
 const FALLBACK_TIMEOUT: Duration = Duration::from_secs(60);
 const JWK_URL: &str =
@@ -78,11 +80,11 @@ pub enum VerificationError {
     CannotDecodePublicKeys,
 }
 
-fn verify_id_token_with_project_id(
+fn verify_id_token_with_project_id<T: DeserializeOwned>(
     config: &JwkConfiguration,
     public_keys: &JwkKeys,
     token: &str,
-) -> Result<FirebaseUser, VerificationError> {
+) -> Result<T, VerificationError> {
     let header = decode_header(token).map_err(|_| VerificationError::UnkownKeyAlgorithm)?;
 
     if header.alg != Algorithm::RS256 {
@@ -105,28 +107,34 @@ fn verify_id_token_with_project_id(
     validation.set_audience(&[config.audience.to_owned()]);
     validation.set_issuer(&[config.issuer.to_owned()]);
 
-    let user = decode::<FirebaseUser>(token, &decoding_key, &validation)
-        .map_err(|_| VerificationError::InvalidSignature)?
+    let user = decode::<T>(token, &decoding_key, &validation)
+        .map_err(|err| {
+            tracing::debug!("{}", err.to_string());
+
+            VerificationError::InvalidSignature
+        })?
         .claims;
     Ok(user)
 }
 
 #[derive(Debug)]
-struct JwkVerifier {
+struct JwkVerifier<T: DeserializeOwned> {
     keys: JwkKeys,
     config: JwkConfiguration,
+    resource_type: PhantomData<T>,
 }
 
-impl JwkVerifier {
-    fn new(project_id: &str, keys: JwkKeys) -> JwkVerifier {
-        JwkVerifier {
+impl<T: DeserializeOwned> JwkVerifier<T> {
+    fn new(project_id: &str, keys: JwkKeys) -> JwkVerifier<T> {
+        JwkVerifier::<T> {
             keys,
             config: get_configuration(project_id),
+            resource_type: PhantomData,
         }
     }
 
-    fn verify(&self, token: &str) -> Option<FirebaseUser> {
-        match verify_id_token_with_project_id(&self.config, &self.keys, token) {
+    fn verify(&self, token: &str) -> Option<T> {
+        match verify_id_token_with_project_id::<T>(&self.config, &self.keys, token) {
             Ok(token_data) => Some(token_data),
             _ => None,
         }
@@ -141,12 +149,12 @@ impl JwkVerifier {
 /// header.
 /// If there is an error during refreshing, automatically retry indefinitely every 10 seconds.
 #[derive(Clone)]
-pub struct FirebaseAuth {
-    verifier: Arc<Mutex<JwkVerifier>>,
+pub struct FirebaseAuth<T: DeserializeOwned + Clone + Send + 'static> {
+    verifier: Arc<Mutex<JwkVerifier<T>>>,
     handler: Arc<Mutex<Box<JoinHandle<()>>>>,
 }
 
-impl Drop for FirebaseAuth {
+impl<T: DeserializeOwned + Clone + Send> Drop for FirebaseAuth<T> {
     fn drop(&mut self) {
         // Stop the update thread when the updater is destructed
         let handler = self.handler.lock().unwrap();
@@ -154,8 +162,8 @@ impl Drop for FirebaseAuth {
     }
 }
 
-impl FirebaseAuth {
-    pub async fn new(project_id: &str) -> FirebaseAuth {
+impl<T: DeserializeOwned + Clone + Send> FirebaseAuth<T> {
+    pub async fn new(project_id: &str) -> FirebaseAuth<T> {
         let jwk_keys: JwkKeys = match get_public_keys().await {
             Ok(keys) => keys,
             Err(_) => {
@@ -173,7 +181,7 @@ impl FirebaseAuth {
         instance
     }
 
-    pub fn verify(&self, token: &str) -> Option<FirebaseUser> {
+    pub fn verify(&self, token: &str) -> Option<T> {
         let verifier = self.verifier.lock().unwrap();
         verifier.verify(token)
     }
