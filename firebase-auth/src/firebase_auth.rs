@@ -80,6 +80,12 @@ pub enum VerificationError {
     CannotDecodePublicKeys,
 }
 
+impl std::fmt::Display for VerificationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 fn verify_id_token_with_project_id<T: DeserializeOwned>(
     config: &JwkConfiguration,
     public_keys: &JwkKeys,
@@ -133,11 +139,8 @@ impl<T: DeserializeOwned> JwkVerifier<T> {
         }
     }
 
-    fn verify(&self, token: &str) -> Option<T> {
-        match verify_id_token_with_project_id::<T>(&self.config, &self.keys, token) {
-            Ok(token_data) => Some(token_data),
-            _ => None,
-        }
+    fn verify(&self, token: &str) -> Result<T, VerificationError> {
+        verify_id_token_with_project_id::<T>(&self.config, &self.keys, token)
     }
 
     fn set_keys(&mut self, keys: JwkKeys) {
@@ -181,7 +184,7 @@ impl<T: DeserializeOwned + Clone + Send> FirebaseAuth<T> {
         instance
     }
 
-    pub fn verify(&self, token: &str) -> Option<T> {
+    pub fn verify(&self, token: &str) -> Result<T, VerificationError> {
         let verifier = self.verifier.lock().unwrap();
         verifier.verify(token)
     }

@@ -15,9 +15,11 @@ jobs:
         steps:
             - uses: actions/checkout@v3
             - name: Build example actix
-              run: cargo build --example actix_basic
+              run: cargo build -p example-actix-basic
             - name: Build example axum
-              run: cargo build --example axum_basic
+              run: cargo build -p example-axum-basic
+            - name: Build example axum sqlite
+              run: cargo build -p example-axum-sqlite
 
             - name: Create credential file
               run: |
@@ -25,4 +27,4 @@ jobs:
                   echo "[registry]" >> ~/.cargo/credentials.toml
                   echo "token = '${{ secrets.CARGO_KEY }}'" >> ~/.cargo/credentials.toml
             - name: Deploy to cargo
-              run: cargo publish
+              run: cargo publish -p firebase-auth

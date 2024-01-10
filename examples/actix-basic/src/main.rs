@@ -1,5 +1,4 @@
 use actix_web::{get, middleware::Logger, web::Data, App, HttpServer, Responder};
-use env_logger::Env;
 use firebase_auth::{FirebaseAuth, FirebaseUser};
 
 #[get("/hello")]
